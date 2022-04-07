@@ -53,69 +53,57 @@ interface ICryptoDevsNFT {
 }
 
 contract CryptoDevsDAO is IERC721Receiver {
-    // Interfaces to connect to the FakeNFTMarketplace and CryptoDevsNFT contracts
     IFakeNFTMarketplace nftMarketplace;
     ICryptoDevsNFT cryptoDevsNft;
 
-    // Enums for Proposal Types and Vote Types
+    constructor(address nftContract, address marketplaceContract) payable {
+        cryptoDevsNft = ICryptoDevsNFT(nftContract);
+        nftMarketplace = IFakeNFTMarketplace(marketplaceContract);
+    }
+
     enum ProposalType {
         BUY,
         SELL
     }
+
     enum VoteType {
         YAY,
         NAY
     }
 
-    // Structs for Proposal and Member
     struct Proposal {
-        // the tokenId to buy or sell from the marketplace
+        // the token to buy or sell from the fake marketplace
         uint256 nftTokenId;
-        // the timestamp until which this proposal is open for voting
+        // how long does voting go on
         uint256 deadline;
-        // number of yes votes
         uint256 yayVotes;
-        // number of no votes
         uint256 nayVotes;
-        // has this proposal been executed
         bool executed;
-        // is this proposal a buy or a sell?
         ProposalType proposalType;
-        // mapping of members who have already voted
         mapping(address => bool) voters;
     }
 
     struct Member {
-        uint256[] lockedUpNFTs;
         uint256 joinedAt;
+        // array of tokenIds for CryptoDevs NFT that are locked up by this member
+        uint256[] lockedUpNFTs;
     }
 
-    // Mapping of proposal IDs to proposal structs
+    // Map Proposal ID to Proposal
     mapping(uint256 => Proposal) public proposals;
-    // mapping of members to locked up NFT token Ids
     mapping(address => Member) public members;
-    // total number of proposals created so far
+
+    mapping(uint256 => bool) public tokenLockedUp;
+
     uint256 public numProposals;
-    // total CryptoDevNFTs locked up by members
     uint256 public totalVotingPower;
 
-    // Constructor to setup interfaces, and accepts ETH deposit for initial treasury
-    constructor(address cryptoDevsNftAddress, address marketplaceAddress)
-        payable
-    {
-        cryptoDevsNft = ICryptoDevsNFT(cryptoDevsNftAddress);
-        nftMarketplace = IFakeNFTMarketplace(marketplaceAddress);
-    }
-
-    // memberOnly modifier imposes membership to call functions
     modifier memberOnly() {
         require(members[msg.sender].lockedUpNFTs.length > 0, "NOT_A_MEMBER");
         _;
     }
 
-    /// @dev createProposal - create a proposal within a DAO to buy/sell an NFT from Marketplace
-    /// @param _forTokenId - token ID to buy/sell on the marketplace
-    /// @param _proposalType - BUY or SELL?
+    // Create a proposal in the DAO
     function createProposal(uint256 _forTokenId, ProposalType _proposalType)
         external
         memberOnly
@@ -126,7 +114,7 @@ contract CryptoDevsDAO is IERC721Receiver {
         } else {
             require(
                 nftMarketplace.ownerOf(_forTokenId) == address(this),
-                "NFT_NOT_OWNED"
+                "NOT_OWNED"
             );
         }
 
@@ -140,10 +128,8 @@ contract CryptoDevsDAO is IERC721Receiver {
         return numProposals - 1;
     }
 
-    /// @dev voteOnProposal - allows members to vote on active proposals
-    /// @param _proposalId - ID of the proposal to vote on
-    /// @param vote - YAY or NAY?
-    function voteOnProposal(uint256 _proposalId, VoteType vote)
+    // Vote yes/no on a given proposal
+    function voteOnProposal(uint256 _proposalId, VoteType _vote)
         external
         memberOnly
     {
@@ -153,15 +139,15 @@ contract CryptoDevsDAO is IERC721Receiver {
 
         proposal.voters[msg.sender] = true;
         uint256 votingPower = members[msg.sender].lockedUpNFTs.length;
-        if (vote == VoteType.YAY) {
+
+        if (_vote == VoteType.YAY) {
             proposal.yayVotes += votingPower;
         } else {
             proposal.nayVotes += votingPower;
         }
     }
 
-    /// @dev executeProposal - allows any member to execute a proposal who's deadline has passed
-    /// @param _proposalId - ID of proposal to execute
+    // Execute a proposal
     function executeProposal(uint256 _proposalId) external memberOnly {
         Proposal storage proposal = proposals[_proposalId];
         require(proposal.deadline <= block.timestamp, "ACTIVE_PROPOSAL");
@@ -184,7 +170,28 @@ contract CryptoDevsDAO is IERC721Receiver {
         }
     }
 
-    /// @dev quit - allows members to quit the DAO, take their share of the profit and withdraw CryptoDevsNFTs back
+    // We need a way for peopel to become a member of the DAO
+    function onERC721Received(
+        address,
+        address from,
+        uint256 tokenId,
+        bytes memory
+    ) public override returns (bytes4) {
+        require(cryptoDevsNft.ownerOf(tokenId) == address(this), "MALICIOUS");
+        require(tokenLockedUp[tokenId] == false, "ALREADY_USED");
+
+        Member storage member = members[from];
+        if (member.lockedUpNFTs.length == 0) {
+            member.joinedAt = block.timestamp;
+        }
+
+        totalVotingPower++;
+
+        members[from].lockedUpNFTs.push(tokenId);
+        return this.onERC721Received.selector;
+    }
+
+    // We need a way for people to leave the DAO
     function quit() external memberOnly {
         Member storage member = members[msg.sender];
         require(
@@ -194,6 +201,7 @@ contract CryptoDevsDAO is IERC721Receiver {
 
         uint256 share = (address(this).balance * member.lockedUpNFTs.length) /
             totalVotingPower;
+
         totalVotingPower -= member.lockedUpNFTs.length;
         payable(msg.sender).transfer(share);
         for (uint256 i = 0; i < member.lockedUpNFTs.length; i++) {
@@ -207,25 +215,7 @@ contract CryptoDevsDAO is IERC721Receiver {
         delete members[msg.sender];
     }
 
-    /// @dev onERC721Received - look at {IERC721Receiver-onERC721Received}
-    function onERC721Received(
-        address,
-        address _from,
-        uint256 _tokenId,
-        bytes memory
-    ) public override returns (bytes4) {
-        require(cryptoDevsNft.ownerOf(_tokenId) == address(this), "MALICIOUS");
-        Member storage member = members[_from];
-        if (member.lockedUpNFTs.length == 0) {
-            member.joinedAt = block.timestamp;
-        }
-        totalVotingPower++;
-        members[_from].lockedUpNFTs.push(_tokenId);
-        return this.onERC721Received.selector;
-    }
-
-    // The following two functions allow the contract to accept ETH deposits directly
-    // from a wallet without calling a function
+    // Receive and fallback function
     receive() external payable {}
 
     fallback() external payable {}
