@@ -180,6 +180,7 @@ contract CryptoDevsDAO is IERC721Receiver {
         require(cryptoDevsNft.ownerOf(tokenId) == address(this), "MALICIOUS");
         require(tokenLockedUp[tokenId] == false, "ALREADY_USED");
 
+        tokenLockedUp[tokenId] = true;
         Member storage member = members[from];
         if (member.lockedUpNFTs.length == 0) {
             member.joinedAt = block.timestamp;
