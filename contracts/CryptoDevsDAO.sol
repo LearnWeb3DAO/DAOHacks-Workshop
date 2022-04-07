@@ -10,6 +10,10 @@ interface IFakeNFTMarketplace {
     /// @return Returns a boolean value - true if available, false if not
     function available(uint256 _tokenId) external view returns (bool);
 
+    /// @dev ownerOf() returns the owner of a given _tokenId from the NFT marketplace
+    /// @return returns the address of the owner
+    function ownerOf(uint256 _tokenId) external view returns (address);
+
     /// @dev purchase() purchases an NFT from the FakeNFTMarketplace
     /// @param _tokenId - the fake NFT tokenID to purchase
     function purchase(uint256 _tokenId) external payable;
@@ -34,6 +38,16 @@ interface ICryptoDevsNFT {
         external
         view
         returns (uint256);
+
+    function safeTransferFrom(
+        address from,
+        address to,
+        uint256 tokenId,
+        bytes calldata data
+    ) external;
+
+    /// @dev Returns the owner of the `tokenId` token.
+    function ownerOf(uint256 tokenId) external view returns (address owner);
 }
 
 contract CryptoDevsDAO {}
