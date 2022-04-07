@@ -4,7 +4,7 @@
   "description": "",
   "main": "index.js",
   "scripts": {
-    "deploy": "npx hardhat run scripts/deploy.ts --network localhost"
+    "deploy": "npx hardhat run scripts/deploy.ts --network ropsten"
   },
   "keywords": [
     "solidity",
