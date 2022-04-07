@@ -8,6 +8,8 @@ contract FakeNFTMarketplace {
     uint256 public constant nftPurchasePrice = 0.001 ether;
     uint256 public constant nftSalePrice = 0.002 ether;
 
+    constructor() payable {}
+
     /// @dev purchase() accepts ETH and marks the owner of the given `tokenId` as the caller address
     /// @param _tokenId - the fake NFT token Id to purchase
     function purchase(uint256 _tokenId) external payable {
